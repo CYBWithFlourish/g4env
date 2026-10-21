@@ -90,13 +90,19 @@ g4env models --provider gemini
 g4env audit . --provider gemini
 
 # Use a different model
-g4env audit . --provider gemini --model gemini-3.8-flash
+g4env audit . --provider gemini --model gemini-flash-latest
 
 # Machine readable output
 g4env audit . --provider gemini --format json
 ```
 
 ### Choosing a model
+
+The default is `gemini-3.8-flash`:
+
+```bash
+g4env audit . --provider gemini --model gemini-3.8-flash
+```
 
 Google retires models for newly created API keys, and the set of models a key
 can reach changes over time. `g4env models --provider gemini` lists **every**
@@ -107,34 +113,41 @@ g4env models --provider gemini
 ```
 
 Some of the names in that list are preview builds, some are image or audio
-models, and some are retired. A good starting point for this task is a
-`gemini-3.x-flash` model, for example:
-
-```bash
-g4env audit . --provider gemini --model gemini-3.8-flash
-```
-
-The Gemini API also hosts **Gemma 4** models, which is the family this
-project is named after. They are a good match for the contextual analysis
-because the prompt asks for a small, strictly formatted JSON answer:
-
-```bash
-g4env audit . --provider gemini --model gemma-4-26b-a4b-it
-```
-
-g4env starts with `gemini-2.5-flash` and keeps going if that model is not
-available to your key: a retired model is reported on stderr and the audit
-continues with the next model that answers.
+models, and some are retired. Models that are retired answer with
 
 ```text
-g4env: warning: the model gemini-2.5-flash is not available to this API key;
-continuing with gemini-3.8-flash
+HTTP 404 ... is no longer available to new users
+```
+
+When that happens g4env reports it on stderr and continues with a model that
+answers, so the audit still completes:
+
+```text
+g4env: warning: the model gemini-3.8-flash is not available to this API key;
+continuing with gemini-flash-latest
 ```
 
 The report always records the model that actually produced the findings, so
-`metadata.model` tells you the truth even when a fallback was used. Temporary
-failures (`429`, `500`, `502`, `503`, `504` - usually "high demand") are
-retried automatically with a short backoff.
+`metadata.model` tells you the truth even when a fallback was used.
+
+Temporary failures are handled automatically:
+
+| Answer | What g4env does |
+| --- | --- |
+| `500`, `502`, `503`, `504` (usually "high demand") | Retries the same model a few times, then continues with the next model. |
+| `429` (the key is rate limited) | Waits and retries the *same* model. The limit belongs to the key, so another model would hit it too. |
+| `400` (invalid key) | Stops. The key needs to be fixed. |
+
+> **Gemma 4 on the hosted API.** The Gemini API also serves the **Gemma 4**
+> family, which this project is named after:
+>
+> ```bash
+> g4env audit . --provider gemini --model gemma-4-26b-a4b-it
+> ```
+>
+> It is a useful second opinion, but it does not honour the JSON output mode
+> as strictly as the Gemini models, so it contributes fewer model findings.
+> Use it alongside `gemini-3.8-flash`, not instead of it.
 
 ### What happens to your data
 
@@ -185,7 +198,7 @@ Expected output:
 ```text
 MODEL                   SIZE  MODIFIED  DETAILS
 ──────────────────────── ───── ───────── ─────────────────
-gemini-2.5-flash        -     -         Flash
+gemini-3.8-flash        -     -         Flash
 ```
 
 The exact list depends on your key. If you see `g4env: error: the Gemini API

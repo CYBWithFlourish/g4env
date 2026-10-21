@@ -31,7 +31,7 @@ __all__ = [
 ]
 
 #: Default Gemini model.
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 
 #: Default Gemini REST endpoint.
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -44,16 +44,28 @@ API_KEY_ENV_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "G4ENV_GEMINI_API_KEY")
 #: Google retires models for newly created API keys, so a model that worked
 #: yesterday can answer "no longer available to new users" today. When that
 #: happens the provider continues with the first fallback that answers.
-FALLBACK_MODELS: tuple[str, ...] = ("gemini-3.8-flash", "gemma-4-26b-a4b-it")
+FALLBACK_MODELS: tuple[str, ...] = ("gemini-flash-latest", "gemma-4-26b-a4b-it")
 
-#: HTTP statuses that are worth retrying because they are temporary.
-TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
+#: HTTP statuses that mean the *model* is temporarily unavailable.
+#:
+#: These are worth retrying and, if that fails, worth switching to another
+#: model for.
+MODEL_TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({500, 502, 503, 504})
+
+#: HTTP status that means the *key* is being rate limited.
+#:
+#: The limit belongs to the account, not to a model, so another model would
+#: hit it as well. It needs a longer wait instead of a switch.
+RATE_LIMIT_STATUS = 429
 
 #: How many times a transient failure is retried before giving up.
 MAX_TRANSIENT_ATTEMPTS = 3
 
 #: Base delay between retries, multiplied by the attempt number.
 RETRY_BACKOFF_SECONDS = 2.0
+
+#: Base delay for a rate limit, which needs a longer wait.
+RATE_LIMIT_BACKOFF_SECONDS = 8.0
 
 #: Markers that identify a "this model does not exist for you" answer.
 _MODEL_UNAVAILABLE_MARKERS = (
@@ -328,12 +340,14 @@ class GeminiProvider(ModelProvider):
         transport: Any | None = None,
         *,
         retry_backoff: float = RETRY_BACKOFF_SECONDS,
+        rate_limit_backoff: float = RATE_LIMIT_BACKOFF_SECONDS,
         fallbacks: Sequence[str] = FALLBACK_MODELS,
     ) -> None:
         super().__init__()
         self.transport = transport or _build_transport(api_key, timeout)
         self.model = model
         self.retry_backoff = retry_backoff
+        self.rate_limit_backoff = rate_limit_backoff
         self.fallbacks = tuple(fallbacks)
 
     def generate(self, prompt: str) -> str:
@@ -344,6 +358,9 @@ class GeminiProvider(ModelProvider):
         the next candidate, as is a model that is temporarily unavailable. The
         switch is reported as a warning so the user always knows which model
         produced the findings.
+
+        A rate limit is *not* a reason to switch: it belongs to the key, so
+        every model would hit it. It is waited out on the same model instead.
         """
         model = self.model or DEFAULT_GEMINI_MODEL
         chain = [model, *(name for name in self.fallbacks if name != model)]
@@ -361,7 +378,7 @@ class GeminiProvider(ModelProvider):
                     )
                     continue
                 status = getattr(exc, "status_code", None)
-                if status in TRANSIENT_STATUS_CODES:
+                if status in MODEL_TRANSIENT_STATUS_CODES:
                     self.warn(
                         f"the model {candidate} is temporarily unavailable"
                         f" (HTTP {status}); continuing with {replacement}"
@@ -376,7 +393,13 @@ class GeminiProvider(ModelProvider):
         )
 
     def _generate_with_retries(self, model: str, prompt: str) -> str:
-        """Call the model, retrying failures that are likely to be temporary."""
+        """Call the model, retrying failures that are likely to be temporary.
+
+        A rate limit belongs to the key rather than to the model, so it is
+        waited out on the same model with a longer delay. A model that is
+        temporarily unavailable is retried briefly; whether to switch to
+        another model afterwards is up to the caller.
+        """
         for attempt in range(1, MAX_TRANSIENT_ATTEMPTS + 1):
             try:
                 return self.transport.generate(
@@ -387,8 +410,19 @@ class GeminiProvider(ModelProvider):
                 )
             except ProviderError as exc:
                 status = getattr(exc, "status_code", None)
-                transient = status in TRANSIENT_STATUS_CODES
-                if not transient or attempt >= MAX_TRANSIENT_ATTEMPTS:
+                if status == RATE_LIMIT_STATUS:
+                    if attempt >= MAX_TRANSIENT_ATTEMPTS:
+                        raise
+                    self.warn(
+                        "the Gemini API is rate limiting this key (HTTP 429);"
+                        " waiting before the next attempt"
+                    )
+                    if self.rate_limit_backoff:
+                        time.sleep(self.rate_limit_backoff * attempt)
+                    continue
+                if status not in MODEL_TRANSIENT_STATUS_CODES:
+                    raise
+                if attempt >= MAX_TRANSIENT_ATTEMPTS:
                     raise
                 if self.retry_backoff:
                     time.sleep(self.retry_backoff * attempt)

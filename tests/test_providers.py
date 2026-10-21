@@ -13,6 +13,8 @@ from g4env.models import Severity
 from g4env.providers.base import extract_json_object
 from g4env.providers.composite import CompositeProvider
 from g4env.providers.gemini import (
+    DEFAULT_GEMINI_MODEL,
+    FALLBACK_MODELS,
     GeminiApiError,
     GeminiProvider,
     GeminiRestTransport,
@@ -47,9 +49,13 @@ def _ollama_handler(payload: str) -> Any:
 
 
 def _gemini_handler(payload: str) -> Any:
-    def handler(path: str, request: dict[str, Any]) -> dict[str, Any]:
+    def handler(path: str, request: dict[str, Any]) -> Any:
         if path.endswith("/models") and request == {}:
-            return {"models": [{"name": "models/gemini-2.5-flash", "displayName": "Flash"}]}
+            return {
+                "models": [
+                    {"name": "models/gemini-3.8-flash", "displayName": "Flash"}
+                ]
+            }
         return {
             "candidates": [
                 {"content": {"parts": [{"text": payload}], "role": "model"}}
@@ -296,7 +302,13 @@ def test_gemini_lists_models(mock_server) -> None:
     server = mock_server(_gemini_handler('{"findings": []}'))
     transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
     models = transport.list_models()
-    assert models[0].name == "gemini-2.5-flash"
+    assert models[0].name == "gemini-3.8-flash"
+
+
+def test_the_default_gemini_model_is_available() -> None:
+    """The default must be a model that new API keys can actually use."""
+    assert DEFAULT_GEMINI_MODEL == "gemini-3.8-flash"
+    assert DEFAULT_GEMINI_MODEL not in FALLBACK_MODELS
 
 
 # --------------------------------------------------------------------------- #
@@ -307,8 +319,8 @@ _RETIRED_MODEL_BODY = {
     "error": {
         "code": 404,
         "message": (
-            "This model models/gemini-2.5-flash is no longer available to new "
-            "users. Please update your code to use models/gemini-3.8-flash."
+            "This model models/gemini-3.8-flash is no longer available to new "
+            "users. Please update your code to use models/gemini-4-argon."
         ),
         "status": "NOT_FOUND",
     }
@@ -317,7 +329,7 @@ _RETIRED_MODEL_BODY = {
 
 def test_gemini_provider_falls_back_when_the_model_is_retired(mock_server) -> None:
     def handler(path: str, request: dict[str, Any]) -> Any:
-        if "gemini-2.5-flash" in path:
+        if "gemini-3.8-flash" in path:
             return 404, _RETIRED_MODEL_BODY
         return {
             "candidates": [{"content": {"parts": [{"text": '{"findings": []}'}]}}]
@@ -330,7 +342,7 @@ def test_gemini_provider_falls_back_when_the_model_is_retired(mock_server) -> No
     )
     findings = provider.analyze_unit(make_unit("A=1\n"))
     assert findings == []
-    assert provider.model == "gemini-3.8-flash"
+    assert provider.model == "gemini-flash-latest"
     assert any("not available" in warning for warning in provider.warnings)
 
 
@@ -350,7 +362,7 @@ def test_gemini_provider_retries_transient_failures(mock_server) -> None:
     )
     provider.analyze_unit(make_unit("A=1\n"))
     assert len(attempts) == 3
-    assert provider.model == "gemini-2.5-flash"
+    assert provider.model == "gemini-3.8-flash"
 
 
 def test_gemini_provider_gives_up_after_the_retry_budget(mock_server) -> None:
@@ -380,6 +392,51 @@ def test_gemini_provider_does_not_retry_a_client_error(mock_server) -> None:
         provider.analyze_unit(make_unit("A=1\n"))
     assert "400" in str(excinfo.value)
     assert len(server.requests) == 1
+
+
+def test_gemini_provider_waits_out_a_rate_limit_on_the_same_model(mock_server) -> None:
+    """A rate limit belongs to the key, so another model would hit it too."""
+    attempts: list[str] = []
+
+    def handler(path: str, request: dict[str, Any]) -> Any:
+        attempts.append(path)
+        if len(attempts) < 3:
+            return 429, {"error": {"code": 429, "message": "Resource exhausted"}}
+        return {"candidates": [{"content": {"parts": [{"text": '{"findings": []}'}]}}]}
+
+    server = mock_server(handler)
+    transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
+    provider = GeminiProvider(
+        api_key="test-key",
+        transport=transport,
+        retry_backoff=0.0,
+        rate_limit_backoff=0.0,
+    )
+    provider.analyze_unit(make_unit("A=1\n"))
+    assert len(attempts) == 3
+    assert all("gemini-3.8-flash" in path for path in attempts)
+    assert provider.model == "gemini-3.8-flash"
+    assert any("rate limiting" in warning for warning in provider.warnings)
+
+
+def test_gemini_provider_does_not_switch_models_on_a_rate_limit(mock_server) -> None:
+    def handler(path: str, request: dict[str, Any]) -> Any:
+        return 429, {"error": {"code": 429, "message": "Resource exhausted"}}
+
+    server = mock_server(handler)
+    transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
+    provider = GeminiProvider(
+        api_key="test-key",
+        transport=transport,
+        retry_backoff=0.0,
+        rate_limit_backoff=0.0,
+    )
+    with pytest.raises(ProviderError) as excinfo:
+        provider.analyze_unit(make_unit("A=1\n"))
+    assert "429" in str(excinfo.value)
+    # the retry budget was spent on the default model, no fallback was tried
+    assert len(server.requests) == 3
+    assert all("gemini-3.8-flash" in path for path, _ in server.requests)
 
 
 def test_gemini_api_error_carries_the_status_code(mock_server) -> None:

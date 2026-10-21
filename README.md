@@ -133,7 +133,7 @@ Directory scans respect `.gitignore` and `.g4envignore` exclusions and skip comm
 | | Mode A - local (Ollama) | Mode B - hosted (Gemini API) |
 | --- | --- | --- |
 | Flag | `--provider ollama` | `--provider gemini` |
-| Model | `gemma2:2b` (the local default) | any model your key can reach, e.g. `gemini-3.8-flash` or `gemma-4-26b-a4b-it` |
+| Model | `gemma2:2b` (the local default) | `gemini-3.8-flash` (the hosted default) |
 | Where the model runs | On your own machine (Ollama server) | Google's hosted API |
 | Network access | localhost only | outbound to `generativelanguage.googleapis.com` |
 | What leaves the machine | Nothing | Redacted file content |
@@ -160,9 +160,9 @@ g4env audit . --provider gemini   # rules + Gemini reasoning
 ```
 
 Google retires models for new API keys, so `g4env models --provider gemini` is the
-authoritative list for your key. If the configured model is not available, g4env says so on
-stderr, continues with a model that answers, and records the model it actually used in the
-report.
+authoritative list for your key. The default is `gemini-3.8-flash`; if it is not
+available to your key, g4env says so on stderr, continues with a model that answers, and
+records the model it actually used in the report.
 
 Both modes are opt-in; `--provider rules` (the default) never touches the network. Full setup
 instructions, the privacy contract and a step-by-step procedure for **testing the current code
@@ -191,7 +191,7 @@ Audits support `text`, `table`, and `json` output formats, with configurable pro
 | --- | --- | --- | --- |
 | `--format` | `json`, `table`, `text` | `text` | Output format (`json` writes raw JSON to stdout). |
 | `--provider` | `rules`, `ollama`, `gemini` | `rules` | Audit execution backend. |
-| `--model` | model name | `gemma2:2b` (Ollama) | Model tag (`ollama`) or model name (`gemini`). For the hosted provider the key decides which models exist: run `g4env models --provider gemini` to see them. |
+| `--model` | model name | `gemma2:2b` (Ollama), `gemini-3.8-flash` (Gemini) | Model tag (`ollama`) or model name (`gemini`). For the hosted provider the key decides which models exist: run `g4env models --provider gemini` to see them. |
 | `--host` | URL | `http://127.0.0.1:11434` | Ollama server URL. |
 | `--fail-on` | `low`, `medium`, `high`, `critical`, `none` | `high` | Exit with code 3 when a finding meets or exceeds this severity. |
 | `--redact` | flag | `true` | Mask sensitive secret values in outputs. |
