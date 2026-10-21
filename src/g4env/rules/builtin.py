@@ -208,7 +208,10 @@ class DatabaseCredentialsRule(Rule):
                 continue
             match = self._URI_RE.search(stripped)
             if match is not None:
-                if is_placeholder_value(match.group("password")):
+                password = match.group("password")
+                if is_placeholder_value(password) or is_reference_value(password):
+                    # The password is a placeholder or a runtime reference,
+                    # so nothing is actually exposed.
                     continue
                 hits.append(
                     RuleHit(
@@ -227,7 +230,8 @@ class DatabaseCredentialsRule(Rule):
                 continue
             password_match = self._PASSWORD_RE.search(stripped)
             if password_match is not None and self._HOST_RE.search(stripped):
-                if is_placeholder_value(password_match.group("password")):
+                password = password_match.group("password")
+                if is_placeholder_value(password) or is_reference_value(password):
                     continue
                 hits.append(
                     RuleHit(

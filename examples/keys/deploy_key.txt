@@ -1,0 +1,8 @@
+The key below is a fabricated example, not a usable private key.
+The point of the file is to trigger the `env.private-key` rule, which is
+the only rule with CRITICAL severity.
+
+-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAy8Dbv8prpJ0kKhlGeJYozo2t60EG8L0561g13R29LvMR5hy
+MIIEowIBAAKCAQEAy8Dbv8prpJ0kKhlGeJYozo2t60EG8L0561g13R29LvMR5hy
+-----END RSA PRIVATE KEY-----

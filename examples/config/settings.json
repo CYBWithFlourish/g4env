@@ -1,0 +1,10 @@
+{
+  "service": "demo-service",
+  "logging": {
+    "level": "info"
+  },
+  "integrations": {
+    "partner_api_key": "8Kd2mQp7LxR4vNc9TbW1yZf6HjA3sE5g",
+    "webhook_secret": "c9Tr7Yw2Kq5Mn8Bp4Vx1Lr9Zt6Hd3Jf0"
+  }
+}

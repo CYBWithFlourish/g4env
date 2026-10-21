@@ -90,11 +90,51 @@ g4env models --provider gemini
 g4env audit . --provider gemini
 
 # Use a different model
-g4env audit . --provider gemini --model gemini-2.5-flash
+g4env audit . --provider gemini --model gemini-3.8-flash
 
 # Machine readable output
 g4env audit . --provider gemini --format json
 ```
+
+### Choosing a model
+
+Google retires models for newly created API keys, and the set of models a key
+can reach changes over time. `g4env models --provider gemini` lists **every**
+model your key can currently see, which is the authoritative answer:
+
+```bash
+g4env models --provider gemini
+```
+
+Some of the names in that list are preview builds, some are image or audio
+models, and some are retired. A good starting point for this task is a
+`gemini-3.x-flash` model, for example:
+
+```bash
+g4env audit . --provider gemini --model gemini-3.8-flash
+```
+
+The Gemini API also hosts **Gemma 4** models, which is the family this
+project is named after. They are a good match for the contextual analysis
+because the prompt asks for a small, strictly formatted JSON answer:
+
+```bash
+g4env audit . --provider gemini --model gemma-4-26b-a4b-it
+```
+
+g4env starts with `gemini-2.5-flash` and keeps going if that model is not
+available to your key: a retired model is reported on stderr and the audit
+continues with the next model that answers.
+
+```text
+g4env: warning: the model gemini-2.5-flash is not available to this API key;
+continuing with gemini-3.8-flash
+```
+
+The report always records the model that actually produced the findings, so
+`metadata.model` tells you the truth even when a fallback was used. Temporary
+failures (`429`, `500`, `502`, `503`, `504` - usually "high demand") are
+retried automatically with a short backoff.
 
 ### What happens to your data
 
@@ -144,13 +184,16 @@ Expected output:
 
 ```text
 MODEL                   SIZE  MODIFIED  DETAILS
-──────────────────────── ───── ───────── ─────────
+──────────────────────── ───── ───────── ─────────────────
 gemini-2.5-flash        -     -         Flash
 ```
 
-If you see `g4env: error: the Gemini API returned HTTP 400 ...`, the key is
-wrong. If you see `cannot reach the Gemini API`, the request was blocked by a
-firewall or proxy.
+The exact list depends on your key. If you see `g4env: error: the Gemini API
+returned HTTP 400 ...`, the key is wrong. If you see `cannot reach the Gemini
+API`, the request was blocked by a firewall or proxy. If a model in the list
+answers with `HTTP 404 ... is no longer available to new users`, that model
+is retired for your key - pick another one, or let the automatic fallback
+handle it.
 
 ### 2. Run the benchmark against the labelled test set
 
@@ -256,7 +299,9 @@ pytest tests/test_providers.py -v
 | --- | --- | --- |
 | `no Gemini API key found` | The key is not exported | `export GEMINI_API_KEY=...` |
 | `the Gemini API returned HTTP 400` | Invalid key | Create a new key in AI Studio |
+| `the Gemini API returned HTTP 404 ... no longer available to new users` | The model is retired for your key | Use another model, e.g. `--model gemini-3.8-flash`; the automatic fallback does this for you |
 | `the Gemini API returned HTTP 429` | Rate limit or quota | Wait, or use `--provider rules` |
+| `the Gemini API returned HTTP 503` | The model is under high demand | It is retried automatically; pick a less busy model if it persists |
 | `the Gemini API blocked the request` | Safety filter | The content tripped the filter; the file is not sent again |
 | `cannot reach the Gemini API` | Proxy or firewall | Check `HTTPS_PROXY` and outbound access |
 | `the google-genai SDK is not installed` | Optional dependency missing | `pip install -e ".[gemini]"` or ignore — the REST fallback works |

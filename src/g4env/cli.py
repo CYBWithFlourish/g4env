@@ -240,7 +240,14 @@ def _handle_audit(args: argparse.Namespace) -> int:
         fail_on=threshold,
         redact=args.redact,
     )
-    result = run_audit(options)
+    try:
+        result = run_audit(options)
+    except G4EnvError:
+        # The provider may have recorded why it struggled, for example that a
+        # model was retired. Show that before the error.
+        for warning in provider.warnings:
+            print(f"g4env: warning: {warning}", file=sys.stderr)
+        raise
     for warning in result.warnings:
         print(f"g4env: warning: {warning}", file=sys.stderr)
 

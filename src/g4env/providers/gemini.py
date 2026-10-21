@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from typing import Any
 
 from g4env.errors import ProviderError
@@ -20,6 +22,8 @@ from g4env.providers.base import SYSTEM_PROMPT, ModelInfo, ModelProvider
 __all__ = [
     "API_KEY_ENV_VARS",
     "DEFAULT_GEMINI_MODEL",
+    "FALLBACK_MODELS",
+    "GeminiApiError",
     "GeminiProvider",
     "GeminiRestTransport",
     "GeminiSdkTransport",
@@ -34,6 +38,60 @@ DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 #: Environment variables inspected (in order) for the API key.
 API_KEY_ENV_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "G4ENV_GEMINI_API_KEY")
+
+#: Models tried when the configured one is not available to the current key.
+#:
+#: Google retires models for newly created API keys, so a model that worked
+#: yesterday can answer "no longer available to new users" today. When that
+#: happens the provider continues with the first fallback that answers.
+FALLBACK_MODELS: tuple[str, ...] = ("gemini-3.8-flash", "gemma-4-26b-a4b-it")
+
+#: HTTP statuses that are worth retrying because they are temporary.
+TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
+
+#: How many times a transient failure is retried before giving up.
+MAX_TRANSIENT_ATTEMPTS = 3
+
+#: Base delay between retries, multiplied by the attempt number.
+RETRY_BACKOFF_SECONDS = 2.0
+
+#: Markers that identify a "this model does not exist for you" answer.
+_MODEL_UNAVAILABLE_MARKERS = (
+    "no longer available",
+    "is not found",
+    "not found",
+    "unknown model",
+    "unsupported model",
+    "invalid model",
+)
+
+
+class GeminiApiError(ProviderError):
+    """An error returned by the Gemini API, with its HTTP status.
+
+    The status code lets the provider tell a retired model (recoverable by
+    switching models) apart from a bad key or a rate limit.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        body: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.body = body
+
+
+def _is_model_unavailable(exc: ProviderError) -> bool:
+    """Return ``True`` when ``exc`` means the model cannot be used."""
+    if getattr(exc, "status_code", None) != 404:
+        return False
+    detail = str(getattr(exc, "body", "") or "") + " " + str(exc)
+    lowered = detail.lower()
+    return any(marker in lowered for marker in _MODEL_UNAVAILABLE_MARKERS)
 
 
 def resolve_api_key(environ: dict[str, str] | None = None) -> str | None:
@@ -87,9 +145,12 @@ class GeminiRestTransport:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 body = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:400]
-            raise ProviderError(
-                f"the Gemini API returned HTTP {exc.code} for {path}: {detail}"
+            with exc:
+                detail = exc.read().decode("utf-8", errors="replace")[:400]
+            raise GeminiApiError(
+                f"the Gemini API returned HTTP {exc.code} for {path}: {detail}",
+                status_code=exc.code,
+                body=detail,
             ) from exc
         except urllib.error.URLError as exc:
             raise ProviderError(
@@ -216,7 +277,12 @@ class GeminiSdkTransport:
                 config=config,
             )
         except Exception as exc:  # pragma: no cover - SDK specific
-            raise ProviderError(f"the Gemini API request failed: {exc}") from exc
+            status = getattr(exc, "code", None)
+            raise GeminiApiError(
+                f"the Gemini API request failed: {exc}",
+                status_code=status if isinstance(status, int) else None,
+                body=str(exc),
+            ) from exc
         text = getattr(response, "text", None)
         if not isinstance(text, str):
             raise ProviderError("the Gemini API returned an empty response")
@@ -260,18 +326,74 @@ class GeminiProvider(ModelProvider):
         model: str = DEFAULT_GEMINI_MODEL,
         timeout: float = 120.0,
         transport: Any | None = None,
+        *,
+        retry_backoff: float = RETRY_BACKOFF_SECONDS,
+        fallbacks: Sequence[str] = FALLBACK_MODELS,
     ) -> None:
         super().__init__()
         self.transport = transport or _build_transport(api_key, timeout)
         self.model = model
+        self.retry_backoff = retry_backoff
+        self.fallbacks = tuple(fallbacks)
 
     def generate(self, prompt: str) -> str:
-        """Run the hosted model and return its raw response."""
-        return self.transport.generate(
-            model=self.model,
-            system=SYSTEM_PROMPT,
-            prompt=prompt,
-            json_mode=True,
+        """Run the hosted model and return its raw response.
+
+        The configured model is tried first. A model that the current key may
+        not use any more (Google retires models for new keys) is replaced by
+        the next candidate, as is a model that is temporarily unavailable. The
+        switch is reported as a warning so the user always knows which model
+        produced the findings.
+        """
+        model = self.model or DEFAULT_GEMINI_MODEL
+        chain = [model, *(name for name in self.fallbacks if name != model)]
+        for index, candidate in enumerate(chain):
+            try:
+                text = self._generate_with_retries(candidate, prompt)
+            except ProviderError as exc:
+                if index == len(chain) - 1:
+                    raise
+                replacement = chain[index + 1]
+                if _is_model_unavailable(exc):
+                    self.warn(
+                        f"the model {candidate} is not available to this API key;"
+                        f" continuing with {replacement}"
+                    )
+                    continue
+                status = getattr(exc, "status_code", None)
+                if status in TRANSIENT_STATUS_CODES:
+                    self.warn(
+                        f"the model {candidate} is temporarily unavailable"
+                        f" (HTTP {status}); continuing with {replacement}"
+                    )
+                    continue
+                raise
+            if candidate != model:
+                self.model = candidate
+            return text
+        raise ProviderError(  # pragma: no cover - the loop always returns or raises
+            "the Gemini API did not return a response"
+        )
+
+    def _generate_with_retries(self, model: str, prompt: str) -> str:
+        """Call the model, retrying failures that are likely to be temporary."""
+        for attempt in range(1, MAX_TRANSIENT_ATTEMPTS + 1):
+            try:
+                return self.transport.generate(
+                    model=model,
+                    system=SYSTEM_PROMPT,
+                    prompt=prompt,
+                    json_mode=True,
+                )
+            except ProviderError as exc:
+                status = getattr(exc, "status_code", None)
+                transient = status in TRANSIENT_STATUS_CODES
+                if not transient or attempt >= MAX_TRANSIENT_ATTEMPTS:
+                    raise
+                if self.retry_backoff:
+                    time.sleep(self.retry_backoff * attempt)
+        raise ProviderError(  # pragma: no cover - the loop always returns or raises
+            "the Gemini API did not return a response"
         )
 
     def list_models(self) -> list[ModelInfo]:

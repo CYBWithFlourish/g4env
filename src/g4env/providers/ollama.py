@@ -48,7 +48,8 @@ class OllamaTransport:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 body = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:400]
+            with exc:
+                detail = exc.read().decode("utf-8", errors="replace")[:400]
             raise ProviderError(
                 f"the Ollama server returned HTTP {exc.code} for {path}: {detail}"
             ) from exc

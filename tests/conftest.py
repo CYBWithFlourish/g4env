@@ -85,7 +85,11 @@ def make_unit(
 
 
 class _MockServer:
-    """A tiny HTTP server used to fake an Ollama or Gemini endpoint."""
+    """A tiny HTTP server used to fake an Ollama or Gemini endpoint.
+
+    A handler may return a plain payload (answered with ``200``) or a
+    ``(status, payload)`` pair so that error paths can be exercised.
+    """
 
     def __init__(self, handler: Callable[[str, dict[str, Any]], Any]) -> None:
         self.requests: list[tuple[str, dict[str, Any]]] = []
@@ -104,9 +108,12 @@ class _MockServer:
                 outer.headers.append(
                     {key.lower(): value for key, value in self.headers.items()}
                 )
-                body = handler(self.path, payload)
-                encoded = json.dumps(body).encode("utf-8")
-                self.send_response(200)
+                result = handler(self.path, payload)
+                status = 200
+                if isinstance(result, tuple):
+                    status, result = result
+                encoded = json.dumps(result).encode("utf-8")
+                self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(encoded)))
                 self.end_headers()

@@ -60,6 +60,7 @@ class CompositeProvider(Provider):
         findings: list[Finding] = []
         for provider in self._providers:
             findings.extend(provider.analyze_unit(unit))
+        self._sync_model()
         return findings
 
     def analyze_project(
@@ -71,7 +72,19 @@ class CompositeProvider(Provider):
         findings: list[Finding] = []
         for provider in self._providers:
             findings.extend(provider.analyze_project(root, candidates))
+        self._sync_model()
         return findings
+
+    def _sync_model(self) -> None:
+        """Mirror the model of the primary backend.
+
+        A model backend may switch to a different model while it runs, for
+        example when the configured one was retired. The report must name the
+        model that actually produced the findings.
+        """
+        primary = self._providers[-1]
+        if primary.model != self.model:
+            self.model = primary.model
 
     def list_models(self) -> list[ModelInfo]:
         """Return the models of the first backend that exposes any."""

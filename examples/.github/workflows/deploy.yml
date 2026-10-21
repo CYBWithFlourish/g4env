@@ -1,0 +1,17 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # env.secret-in-ci: a literal value assigned to a sensitive key.
+      DEPLOY_API_KEY: 8Kd2mQp7LxR4vNc9TbW1yZf6HjA3sE5g
+      DATABASE_URL: postgres://app_service:Kx7mQ2wR9tV4nB6yL3c@db.internal:5432/production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy the service
+        run: ./scripts/deploy.sh

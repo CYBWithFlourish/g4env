@@ -85,6 +85,17 @@ def test_db_credentials_ignores_placeholder_password() -> None:
     assert rule_ids("DATABASE_URL=postgres://user:password@localhost:5432/app\n") == set()
 
 
+def test_db_credentials_ignores_a_referenced_password() -> None:
+    """A connection string that points at a variable exposes nothing."""
+    text = "DATABASE_URL=postgres://app:${DB_PASSWORD}@db.internal:5432/app\n"
+    assert rule_ids(text) == set()
+
+
+def test_db_credentials_ignores_a_referenced_keyword_password() -> None:
+    text = 'CONN="Server=db01;Database=app;User Id=appuser;Password=${DB_PASSWORD};"\n'
+    assert rule_ids(text) == set()
+
+
 def test_insecure_default_only_for_templates() -> None:
     text = "API_KEY=" + FAKE_STRIPE_KEY + "\n"
     assert "env.insecure-default" not in rule_ids(text)

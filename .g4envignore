@@ -19,3 +19,8 @@
 
 # The redaction module contains the private key marker that it strips.
 /src/g4env/scanning/redaction.py
+
+# The demo fixtures contain deliberate example credentials. They are meant to
+# be scanned with `g4env audit examples`, not by the repository self-scan.
+/examples/
+

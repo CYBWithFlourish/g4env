@@ -1,0 +1,13 @@
+service:
+  name: demo-service
+  replicas: 3
+
+database:
+  # env.db-credentials: the connection string carries a literal password.
+  url: postgres://app_service:Kx7mQ2wR9tV4nB6yL3c@db.internal:5432/production
+  pool_size: 20
+
+integrations:
+  # env.raw-secret: a secret shaped name with an opaque literal value.
+  partner_api_key: 8Kd2mQp7LxR4vNc9TbW1yZf6HjA3sE5g
+  timeout_seconds: 30

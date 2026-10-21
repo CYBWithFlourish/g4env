@@ -133,7 +133,7 @@ Directory scans respect `.gitignore` and `.g4envignore` exclusions and skip comm
 | | Mode A - local (Ollama) | Mode B - hosted (Gemini API) |
 | --- | --- | --- |
 | Flag | `--provider ollama` | `--provider gemini` |
-| Default model | `gemma2:2b` | `gemini-2.5-flash` |
+| Model | `gemma2:2b` (the local default) | any model your key can reach, e.g. `gemini-3.8-flash` or `gemma-4-26b-a4b-it` |
 | Where the model runs | On your own machine (Ollama server) | Google's hosted API |
 | Network access | localhost only | outbound to `generativelanguage.googleapis.com` |
 | What leaves the machine | Nothing | Redacted file content |
@@ -155,9 +155,14 @@ Mode B (hosted) sends **redacted** content to the Gemini API and requires an API
 
 ```bash
 export GEMINI_API_KEY="your-key"
-g4env models --provider gemini    # check the key and the connection
+g4env models --provider gemini    # list the models your key can reach
 g4env audit . --provider gemini   # rules + Gemini reasoning
 ```
+
+Google retires models for new API keys, so `g4env models --provider gemini` is the
+authoritative list for your key. If the configured model is not available, g4env says so on
+stderr, continues with a model that answers, and records the model it actually used in the
+report.
 
 Both modes are opt-in; `--provider rules` (the default) never touches the network. Full setup
 instructions, the privacy contract and a step-by-step procedure for **testing the current code
@@ -186,7 +191,7 @@ Audits support `text`, `table`, and `json` output formats, with configurable pro
 | --- | --- | --- | --- |
 | `--format` | `json`, `table`, `text` | `text` | Output format (`json` writes raw JSON to stdout). |
 | `--provider` | `rules`, `ollama`, `gemini` | `rules` | Audit execution backend. |
-| `--model` | model name | `gemma2:2b` | Model tag (`ollama`) or model name (`gemini`). |
+| `--model` | model name | `gemma2:2b` (Ollama) | Model tag (`ollama`) or model name (`gemini`). For the hosted provider the key decides which models exist: run `g4env models --provider gemini` to see them. |
 | `--host` | URL | `http://127.0.0.1:11434` | Ollama server URL. |
 | `--fail-on` | `low`, `medium`, `high`, `critical`, `none` | `high` | Exit with code 3 when a finding meets or exceeds this severity. |
 | `--redact` | flag | `true` | Mask sensitive secret values in outputs. |
@@ -404,6 +409,34 @@ To explore the available detection rules:
 g4env rules
 ```
 
+### 5. See it work without any setup
+
+The repository ships with a set of demo fixtures, so you can see every rule
+fire without a model, an API key or a network connection:
+
+```bash
+g4env audit examples
+```
+
+```text
+g4env 1.0.0  |  target: examples
+provider: rules (offline)  |  model: -  |  schema: 1.0
+files scanned: 10  |  duration: 9 ms
+risk score: 100/100
+
+17 finding(s): 1 critical, 11 high, 5 medium.
+
+  [CRITICAL] env.private-key  keys/deploy_key.txt:5
+    Private key embedded in configuration
+    ...
+```
+
+The fixtures cover all nine rules - a leaked key, a connection string with a
+password, a weak password, a high entropy blob, a template with a real value,
+a tracked `.env`, a hardcoded authorization header, a secret in a CI pipeline
+and a private key block. `examples/clean.env` is the counterpart that reports
+nothing. See [`examples/README.md`](examples/README.md) for the full map.
+
 For local AI-assisted analysis, install the optional Ollama integration, ensure Ollama is running, and pull a supported model:
 
 ```bash
@@ -441,6 +474,7 @@ g4env bench                 # rule quality against the labelled test set
 | [`docs/providers.md`](docs/providers.md) | The two model modes, Ollama and Gemini setup, the privacy contract, and how to test the current code against the Gemini API. |
 | [`docs/rules.md`](docs/rules.md) | Every deterministic rule with examples of what is and is not reported. |
 | [`docs/ci.md`](docs/ci.md) | Wiring g4env into GitHub Actions, GitLab CI and pre-commit, with exit-code thresholds. |
+| [`examples/README.md`](examples/README.md) | The demo fixtures and which rule each of them triggers. |
 
 ---
 

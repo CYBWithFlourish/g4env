@@ -13,6 +13,7 @@ from g4env.models import Severity
 from g4env.providers.base import extract_json_object
 from g4env.providers.composite import CompositeProvider
 from g4env.providers.gemini import (
+    GeminiApiError,
     GeminiProvider,
     GeminiRestTransport,
     resolve_api_key,
@@ -220,6 +221,17 @@ def test_ollama_transport_reports_unreachable_server() -> None:
     assert "cannot reach" in str(excinfo.value)
 
 
+def test_ollama_transport_reports_an_http_error(mock_server) -> None:
+    def handler(path: str, request: dict[str, Any]) -> Any:
+        return 500, {"error": "model not found"}
+
+    server = mock_server(handler)
+    transport = OllamaTransport(host=server.url)
+    with pytest.raises(ProviderError) as excinfo:
+        transport.list_models()
+    assert "HTTP 500" in str(excinfo.value)
+
+
 # --------------------------------------------------------------------------- #
 # Gemini
 # --------------------------------------------------------------------------- #
@@ -285,6 +297,100 @@ def test_gemini_lists_models(mock_server) -> None:
     transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
     models = transport.list_models()
     assert models[0].name == "gemini-2.5-flash"
+
+
+# --------------------------------------------------------------------------- #
+# Gemini resilience: retired models and transient failures
+# --------------------------------------------------------------------------- #
+
+_RETIRED_MODEL_BODY = {
+    "error": {
+        "code": 404,
+        "message": (
+            "This model models/gemini-2.5-flash is no longer available to new "
+            "users. Please update your code to use models/gemini-3.8-flash."
+        ),
+        "status": "NOT_FOUND",
+    }
+}
+
+
+def test_gemini_provider_falls_back_when_the_model_is_retired(mock_server) -> None:
+    def handler(path: str, request: dict[str, Any]) -> Any:
+        if "gemini-2.5-flash" in path:
+            return 404, _RETIRED_MODEL_BODY
+        return {
+            "candidates": [{"content": {"parts": [{"text": '{"findings": []}'}]}}]
+        }
+
+    server = mock_server(handler)
+    transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
+    provider = GeminiProvider(
+        api_key="test-key", transport=transport, retry_backoff=0.0
+    )
+    findings = provider.analyze_unit(make_unit("A=1\n"))
+    assert findings == []
+    assert provider.model == "gemini-3.8-flash"
+    assert any("not available" in warning for warning in provider.warnings)
+
+
+def test_gemini_provider_retries_transient_failures(mock_server) -> None:
+    attempts: list[str] = []
+
+    def handler(path: str, request: dict[str, Any]) -> Any:
+        attempts.append(path)
+        if len(attempts) < 3:
+            return 503, {"error": {"code": 503, "message": "high demand"}}
+        return {"candidates": [{"content": {"parts": [{"text": '{"findings": []}'}]}}]}
+
+    server = mock_server(handler)
+    transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
+    provider = GeminiProvider(
+        api_key="test-key", transport=transport, retry_backoff=0.0
+    )
+    provider.analyze_unit(make_unit("A=1\n"))
+    assert len(attempts) == 3
+    assert provider.model == "gemini-2.5-flash"
+
+
+def test_gemini_provider_gives_up_after_the_retry_budget(mock_server) -> None:
+    def handler(path: str, request: dict[str, Any]) -> Any:
+        return 503, {"error": {"code": 503, "message": "high demand"}}
+
+    server = mock_server(handler)
+    transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
+    provider = GeminiProvider(
+        api_key="test-key", transport=transport, retry_backoff=0.0
+    )
+    with pytest.raises(ProviderError) as excinfo:
+        provider.analyze_unit(make_unit("A=1\n"))
+    assert "503" in str(excinfo.value)
+
+
+def test_gemini_provider_does_not_retry_a_client_error(mock_server) -> None:
+    def handler(path: str, request: dict[str, Any]) -> Any:
+        return 400, {"error": {"code": 400, "message": "API key not valid"}}
+
+    server = mock_server(handler)
+    transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
+    provider = GeminiProvider(
+        api_key="test-key", transport=transport, retry_backoff=0.0
+    )
+    with pytest.raises(ProviderError) as excinfo:
+        provider.analyze_unit(make_unit("A=1\n"))
+    assert "400" in str(excinfo.value)
+    assert len(server.requests) == 1
+
+
+def test_gemini_api_error_carries_the_status_code(mock_server) -> None:
+    def handler(path: str, request: dict[str, Any]) -> Any:
+        return 429, {"error": {"code": 429, "message": "rate limited"}}
+
+    server = mock_server(handler)
+    transport = GeminiRestTransport(api_key="test-key", base_url=f"{server.url}/v1beta")
+    with pytest.raises(GeminiApiError) as excinfo:
+        transport.list_models()
+    assert excinfo.value.status_code == 429
 
 
 def test_resolve_api_key_prefers_gemini_variable(monkeypatch) -> None:
