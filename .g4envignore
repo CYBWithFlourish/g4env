@@ -1,0 +1,21 @@
+# Extra ignore rules for the g4env repository itself.
+#
+# g4env scans its own documentation, test fixtures and evaluation set. Those
+# files contain *deliberate* example credentials - they are the product, not a
+# leak. Everything below is excluded from the self-scan so the CI gate only
+# reacts to real findings.
+#
+# The syntax is the same as .gitignore.
+
+# Documentation shows example secrets on purpose.
+/docs/
+
+# The test-suite contains deliberate example credentials.
+/tests/
+
+# The labelled evaluation set and the fake credentials it is built from.
+/src/g4env/bench/dataset.json
+/src/g4env/bench/tokens.py
+
+# The redaction module contains the private key marker that it strips.
+/src/g4env/scanning/redaction.py

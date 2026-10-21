@@ -199,6 +199,13 @@ _REFERENCE_PATTERNS = (
     # CI/CD expression contexts such as ${{ secrets.NAME }} or ${{ vars.NAME }}
     re.compile(r"^\$\{\{\s*(?:secrets|vars|env|inputs|github|needs|steps|strategy|matrix)\b", re.IGNORECASE),
     re.compile(r"^(?:secrets|vars|env|inputs)\.[A-Za-z0-9_.\-]+$", re.IGNORECASE),
+    # Attribute access such as ``self.api_key`` or ``config.token`` reads the
+    # value at runtime instead of embedding it in the source.
+    re.compile(
+        r"^(?:self|this|cls|os|environ|config|settings|opts|options|creds|credentials"
+        r"|ctx|context|client|service|secrets)\."
+        r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$"
+    ),
 )
 
 #: Substrings that mark a value as a placeholder rather than a real secret.
@@ -266,6 +273,11 @@ def is_credential_name(name: str) -> bool:
 def is_reference_value(value: str) -> bool:
     """Return ``True`` when the value only points at another secret source."""
     text = value.strip()
+    if not text:
+        return False
+    # ``"x-goog-api-key": self.api_key,`` - the trailing comma separates the
+    # entry, it is not part of the reference.
+    text = text.rstrip(",;").strip()
     if not text:
         return False
     return any(pattern.match(text) for pattern in _REFERENCE_PATTERNS)

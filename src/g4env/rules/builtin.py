@@ -42,6 +42,9 @@ _NUMERIC_RE = re.compile(r"^[\d.,\s%+-]+$")
 #: A value that is worth reporting as a raw secret.
 _SECRETISH_RE = re.compile(r"^[A-Za-z0-9!#$%^&*()\-_+=|{}\[\]:;<>?/,.~]{10,}$")
 
+#: A call expression such as ``strip().lower()`` is source code, not a literal.
+_CALL_EXPRESSION_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*\(")
+
 #: Minimum length of an opaque value before it is considered a credential.
 _MIN_SECRET_LENGTH = 12
 
@@ -130,6 +133,9 @@ class RawSecretRule(Rule):
         if value.lower() in _BOOLEAN_LITERALS:
             return False
         if _NUMERIC_RE.match(value):
+            return False
+        if _CALL_EXPRESSION_RE.search(value):
+            # ``strip().lower()`` is an expression, not an embedded literal.
             return False
         return bool(_SECRETISH_RE.match(value))
 

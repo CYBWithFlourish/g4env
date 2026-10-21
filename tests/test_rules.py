@@ -107,6 +107,17 @@ def test_hardcoded_auth_header() -> None:
     assert "env.hardcoded-auth-header" in rule_ids(text, name="app.py", kind=FileKind.SOURCE)
 
 
+def test_hardcoded_auth_header_ignores_runtime_references() -> None:
+    text = 'headers = {"x-goog-api-key": self.api_key,}\n'
+    assert "env.hardcoded-auth-header" not in rule_ids(text, name="app.py", kind=FileKind.SOURCE)
+    assert "env.raw-secret" not in rule_ids(text, name="app.py", kind=FileKind.SOURCE)
+
+
+def test_raw_secret_ignores_code_expressions() -> None:
+    text = "secret = match.group(1)\n"
+    assert "env.raw-secret" not in rule_ids(text, name="scanner.py", kind=FileKind.SOURCE)
+
+
 def test_secret_in_ci_only_for_pipelines() -> None:
     text = "jobs:\n  build:\n    env:\n      API_TOKEN: literal-token-value\n"
     assert "env.secret-in-ci" in rule_ids(text, name="ci.yml", kind=FileKind.CI)

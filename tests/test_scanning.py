@@ -95,6 +95,16 @@ def test_discovery_respects_gitignore(tmp_path: Path) -> None:
     assert names == {".gitignore", "keep.env"}
 
 
+def test_discovery_respects_g4envignore(tmp_path: Path) -> None:
+    (tmp_path / ".g4envignore").write_text("fixtures/\n*.example.yaml\n", encoding="utf-8")
+    (tmp_path / "fixtures").mkdir()
+    (tmp_path / "fixtures" / "leaky.env").write_text("A=1\n", encoding="utf-8")
+    (tmp_path / "app.example.yaml").write_text("A=1\n", encoding="utf-8")
+    (tmp_path / "keep.env").write_text("A=1\n", encoding="utf-8")
+    names = {candidate.rel_path for candidate in discover(tmp_path)}
+    assert names == {".g4envignore", "keep.env"}
+
+
 def test_discovery_of_single_file(tmp_path: Path) -> None:
     path = tmp_path / ".env"
     path.write_text("A=1\n", encoding="utf-8")

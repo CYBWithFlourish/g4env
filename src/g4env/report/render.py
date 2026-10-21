@@ -140,8 +140,6 @@ def render_text(report: Report) -> str:
     lines.append(report.summary)
     lines.append("")
     if not report.findings:
-        lines.append("No findings.")
-        lines.append("")
         lines.append("Next steps")
         lines.append("  1. Nothing to fix here, keep auditing on every change.")
         lines.append("  2. Wire `g4env audit . --fail-on high` into CI to catch regressions.")
@@ -167,7 +165,7 @@ def render_table(report: Report) -> str:
     lines.append("")
 
     if not report.findings:
-        lines.append("No findings.")
+        # The summary line already states that there is nothing to report.
         return "\n".join(lines).rstrip() + "\n"
 
     headers = ("SEVERITY", "RULE", "CONF", "LOCATION", "TITLE")

@@ -183,6 +183,15 @@ g4env audit ./config   # audit a directory
 `PATH` may be a single file or a directory. Directories are walked while skipping vendored
 dependencies, build output, binary files and anything excluded by `.gitignore` / `.g4envignore`.
 
+Add a `.g4envignore` file next to the audited project to exclude paths from the scan. It uses the
+same syntax as `.gitignore`:
+
+```gitignore
+# skip the test fixtures and the vendored configuration
+fixtures/
+*.example.yaml
+```
+
 The `ollama` and `gemini` providers always run the deterministic rules first and then add
 contextual findings on top. Every finding records its origin in the `source` field (`rule` or
 `model`).
