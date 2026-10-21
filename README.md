@@ -1,116 +1,134 @@
 # g4env - Gemma 4 Environment Security
 
-**Terminal-native, local-first environment config and secret leak auditing.**
+**Catch exposed secrets before they become security vulnerabilities.**
 
-g4env is an offline CLI for auditing `.env` files, configuration schemas, CI/CD pipelines and
-codebases for hardcoded credentials, sensitive keys and environment anti-patterns. It combines
-high-speed, deterministic regex checks with local Gemma model reasoning via Ollama to spot both
-known key formats and contextual leaks - keeping your sensitive configs strictly on your machine.
+`g4env` is a local-first, terminal-native security auditing tool designed to help developers identify exposed credentials, hardcoded secrets, and insecure environment configurations before they become a problem.
+
+It scans `.env` files, configuration files, CI/CD pipeline definitions, and codebases for potential security risks, including API keys, private keys, database credentials, weak passwords, and other sensitive values that should never be exposed or committed to version control.
+
+By combining fast, deterministic rule-based detection with optional AI-powered contextual analysis through locally running Gemma models, `g4env` helps developers identify security issues while maintaining control over their sensitive configuration data.
+
+Unlike tools that require cloud-based analysis by default, `g4env` is designed to work offline out of the box. Its default rule-based auditing engine makes no network requests, while its optional Ollama integration enables deeper analysis using models running on your own machine.
+
+The project is currently under active development and is available for local testing and community feedback. It has not yet been published on PyPI, so the recommended way to try it is to clone the repository and run it locally. A public PyPI release is planned as the project matures, its capabilities improve, and it gains broader community reach.
 
 ---
 
 ## Why g4env?
 
-Configuration files and environment variables often contain sensitive API keys and secrets that
-should never leave your machine or be exposed to hosted AI services. g4env keeps your audit
-workflow local and secure:
+Environment variables and configuration files are essential to modern software development, but they can also become a major source of security vulnerabilities.
 
-- **Offline by default** - the default provider relies on deterministic regex rules and makes no
-  network calls.
-- **Gemma-powered** - use a locally installed Gemma model through Ollama for deep contextual and
-  semantic analysis.
-- **Automation-friendly** - structured JSON output validated against a versioned report schema
-  with CI-safe exit codes.
-- **Automatic redaction** - detected secrets are automatically masked in terminal outputs and
-  logs.
-- **Explicit network boundaries** - nothing leaves your machine during an audit. The optional
-  hosted Gemini provider is opt-in and says so loudly.
+A forgotten API key in a `.env` file, a private key committed to a repository, or a hardcoded credential inside a CI/CD pipeline can expose applications and infrastructure to unauthorized access.
+
+`g4env` helps developers identify these risks early by making security auditing accessible directly from the terminal.
+
+### How is this different from GitHub secret scanning?
+
+They solve different problems, and the strongest setup uses both.
+
+GitHub's secret scanning is a **repository gate for known provider credentials**. It ships a curated catalog of partner key formats - Stripe, Slack, AWS, GitHub tokens, and so on - and blocks a push when a blob matches one of them. That is genuinely valuable, but it is a needle detector for a fixed catalog, and it only looks at content that is on its way to GitHub.
+
+`g4env` is a **security linter for configuration**, and it runs before anything leaves your machine:
+
+- **It knows about your secrets, not just the providers'.** A password for your internal Postgres, a bearer token for your own API, or a shared credential with no recognizable format has no vendor signature. `g4env` catches those through name heuristics (`*_TOKEN`, `*_SECRET`, `*_PASSWORD`), entropy analysis, and optionally a local model that reads the surrounding context.
+- **It understands configuration mistakes, not just credentials.** A real key pasted into `.env.example`, a weak password, a high-entropy value in an unclassified variable, a hardcoded `Authorization` header in application code, a literal secret in a CI workflow, a `.env` file that was never added to `.gitignore` - GitHub has no opinion on any of these. `g4env` does.
+- **It scans what GitHub never sees.** Untracked files, Kubernetes manifests, Dockerfiles, local overlays, build output - anything in a directory, whether or not it is under version control.
+- **It can run air-gapped.** Auditing proprietary code does not require uploading it anywhere. The default provider makes zero network requests.
+- **It explains itself.** Every finding carries severity, confidence, evidence, impact, and a concrete fix, and the report is a versioned JSON schema you can diff, store, and gate CI on. GitHub tells you the push was blocked; `g4env` tells you what to change and in what order.
+- **It redacts on the way out.** Secret values are masked in terminal output by default, so a screenshot, a CI log, or a bug report does not become a new leak.
+
+The intended workflow is simple: run `g4env audit` locally and in CI to catch the problem at the source, and keep GitHub's protection as the backstop for anything that slips through or for history that already contains a leak.
+
+### Key Features
+
+**🔍 Secret and Credential Detection**
+
+Detects potential security issues, including:
+
+- Exposed API keys and access tokens.
+- Embedded private keys.
+- Hardcoded database credentials.
+- Weak or guessable passwords.
+- Sensitive values in example and template configuration files.
+- Hardcoded credentials in authorization headers.
+- Literal secrets inside CI/CD pipeline definitions.
+- Environment files that may be unintentionally tracked by version control.
+- High-entropy strings that could represent unclassified secrets.
+
+Its detection rules recognize many common credential formats associated with services and platforms such as AWS, GitHub, GitLab, Google, OpenAI, Anthropic, Stripe, Slack, Cloudflare, Supabase, and others.
+
+**🔒 Local-First and Privacy-Focused**
+
+Privacy is a core design principle of `g4env`.
+
+The default rule-based provider runs locally without making network requests. This allows developers to audit sensitive files without transmitting their contents to an external service.
+
+For developers who want deeper analysis, the optional Ollama provider runs supported language models locally, keeping the analysis within their own environment.
+
+A hosted Gemini provider is also available as an explicit opt-in option. When enabled, it sends redacted file content to the hosted API, and the tool communicates this network boundary to the user.
+
+**🤖 AI-Powered Contextual Analysis**
+
+Regular expressions are effective at identifying known credential patterns, but not every secret follows a predictable format.
+
+With its optional Ollama integration, `g4env` can combine deterministic detection with local model-based analysis to identify additional contextual security concerns.
+
+The tool also supports an optional hosted Gemini provider for users who choose remote analysis.
+
+Both model-assisted providers run the deterministic rules first and then add contextual findings, helping combine predictable detection with more flexible analysis.
+
+**🛡️ Automatic Secret Redaction**
+
+Detected secret values are masked in terminal output and logs by default.
+
+The tool also redacts sensitive values before sending content to a model provider, helping reduce the risk of exposing credentials during analysis.
+
+Raw-value output can be explicitly requested when necessary, but it should be used with caution.
+
+**⚙️ Built for Developers and CI/CD Workflows**
+
+`g4env` is designed to fit into existing development and security workflows.
+
+It supports structured JSON reports, readable terminal tables, and plain-text output. Its versioned report schema provides a consistent format for consuming and validating findings programmatically.
+
+Configurable severity thresholds and predictable exit codes also make it possible to use the tool in automated workflows that need to fail when findings meet a specified severity.
+
+**📊 Security Reports and Benchmarking**
+
+Each audit produces findings containing information such as:
+
+- Finding ID and severity.
+- Confidence score.
+- Description of the potential vulnerability.
+- Evidence and relevant file location.
+- Potential impact.
+- Recommended remediation.
+- Detection source, identifying whether the finding originated from a deterministic rule or a model.
+
+Reports follow a versioned JSON schema and are validated before being written.
+
+The project also includes a local benchmarking command and a labelled test dataset for evaluating detection quality across supported providers.
 
 ---
 
-## Status
+## How It Works
 
-The initial implementation includes:
+`g4env` combines deterministic security checks with optional contextual analysis.
 
-- Python package, `g4env` console script, and CI setup.
-- Versioned report schema (1.0) with a documented exit-code contract.
-- `g4env audit [PATH]` supporting `json`, `table`, and `text` formats; `PATH` defaults to the
-  current project directory.
-- Deterministic regex rules for `.env` and configuration files (offline, zero-model default).
-- A local Ollama provider for Gemma models, including model listing and a warm-up command.
-- An optional hosted Gemini provider for teams that accept a remote boundary.
-- Safe input loading with path, size, and binary checks plus automated secret redaction.
-- Model quality and benchmark metrics are measured locally and evaluated against documented test
-  sets.
+1. **Provide a target:** Specify an individual configuration file or a directory to audit. If you omit the path, the current project directory is audited.
+2. **Load and validate inputs:** The tool checks supported inputs and applies file-size, format, and binary-file safeguards.
+3. **Run deterministic checks:** The rule engine searches for known secret patterns and common environment configuration mistakes.
+4. **Perform optional contextual analysis:** If an AI provider is selected, the tool adds model-generated findings to the rule-based results.
+5. **Redact sensitive values:** Secret values are masked in outputs, and sensitive content is redacted before model prompting.
+6. **Generate a report:** Findings are returned as text, a terminal table, or schema-validated JSON.
 
----
-
-## Install
-
-```bash
-git clone https://github.com/CYBWithFlourish/g4env.git
-cd g4env
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"      # installs dev, test, and lint dependencies
-```
-
-The default rule-based provider needs no extra dependencies. To audit using a local Ollama model,
-install with the `ollama` extra:
-
-```bash
-python -m pip install -e ".[ollama]"
-```
-
-To use the hosted Gemini provider, install with the `gemini` extra:
-
-```bash
-python -m pip install -e ".[gemini]"
-```
-
-Both providers are implemented on top of the standard library, so the extras are accelerators
-rather than requirements - `g4env` works without them.
-
-Model weights are never committed to this repository.
-
----
-
-## Quick start
-
-```bash
-# Check CLI version and report schema version
-g4env version
-
-# Audit the whole current project with deterministic offline rules
-g4env audit
-
-# Audit an environment file
-g4env audit ./.env
-
-# Output script-safe JSON to stdout for CI/CD pipelines
-g4env audit . --format json
-
-# Render a readable table for a configuration file
-g4env audit ./config.yaml --format table
-
-# Audit with a local Gemma model via Ollama
-ollama pull gemma2:2b
-g4env models --warm
-g4env audit ./.env --provider ollama
-
-# Audit with the hosted Gemini API (redacted content leaves the machine)
-export GEMINI_API_KEY="your-key"
-g4env audit ./.env --provider gemini
-```
+Directory scans respect `.gitignore` and `.g4envignore` exclusions and skip common vendored dependencies, build outputs, and binary files.
 
 ---
 
 ## The two model modes
 
-g4env always runs the deterministic rules first. On top of them you can add a model that reasons
-about context. There are exactly two ways to do that, and they differ in one important respect:
-**where the model runs**.
+`g4env` always runs the deterministic rules first. On top of them you can add a model that reasons about context. There are exactly two ways to do that, and they differ in one important respect: **where the model runs**.
 
 | | Mode A - local (Ollama) | Mode B - hosted (Gemini API) |
 | --- | --- | --- |
@@ -133,8 +151,7 @@ g4env models --provider ollama    # list what is installed
 g4env audit . --provider ollama   # rules + local Gemma reasoning
 ```
 
-Mode B (hosted) sends **redacted** content to the Gemini API and requires an API key from the
-environment:
+Mode B (hosted) sends **redacted** content to the Gemini API and requires an API key from the environment:
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -148,30 +165,26 @@ against the Gemini API** live in [`docs/providers.md`](docs/providers.md).
 
 ---
 
-## Commands
+## Available Commands
 
-### `g4env version`
+The CLI currently includes several commands for auditing and development workflows.
 
-Prints the CLI version and report schema version:
+| Command              | Purpose                                                        |
+| -------------------- | -------------------------------------------------------------- |
+| `g4env audit [PATH]` | Audit a file or directory for potential security issues. `PATH` is optional and defaults to the current project directory. |
+| `g4env version`      | Display the CLI version and report schema version.             |
+| `g4env models`       | List available models and optionally warm up a selected model. |
+| `g4env rules`        | List deterministic detection rules and their severity levels.  |
+| `g4env schema`       | Display the report schema or validate a report against it.     |
+| `g4env bench`        | Run the local detection-quality benchmark.                     |
 
-```text
-g4env 1.0.0 (report schema 1.0)
-```
+Audits support `text`, `table`, and `json` output formats, with configurable providers and severity thresholds.
 
 ### `g4env audit [PATH]`
 
-Audits a target file or directory and generates a security report. `PATH` is optional: when it is
-omitted, g4env audits the **current project directory** (`.`), walking it recursively.
-
-```bash
-g4env audit            # audit the whole current project
-g4env audit .env       # audit a single file
-g4env audit ./config   # audit a directory
-```
-
 | Option | Values | Default | Description |
 | --- | --- | --- | --- |
-| `--format` | `json`, `table`, `text` | `text` | Output format (json writes raw JSON to stdout). |
+| `--format` | `json`, `table`, `text` | `text` | Output format (`json` writes raw JSON to stdout). |
 | `--provider` | `rules`, `ollama`, `gemini` | `rules` | Audit execution backend. |
 | `--model` | model name | `gemma2:2b` | Model tag (`ollama`) or model name (`gemini`). |
 | `--host` | URL | `http://127.0.0.1:11434` | Ollama server URL. |
@@ -180,11 +193,7 @@ g4env audit ./config   # audit a directory
 | `--no-redact` | flag | - | Show raw values. Use with care. |
 | `--timeout` | seconds | `120` | Timeout for model providers. |
 
-`PATH` may be a single file or a directory. Directories are walked while skipping vendored
-dependencies, build output, binary files and anything excluded by `.gitignore` / `.g4envignore`.
-
-Add a `.g4envignore` file next to the audited project to exclude paths from the scan. It uses the
-same syntax as `.gitignore`:
+Directory scans honour `.gitignore` and `.g4envignore`. Add a `.g4envignore` file next to the audited project to exclude paths from the scan; it uses the same syntax as `.gitignore`:
 
 ```gitignore
 # skip the test fixtures and the vendored configuration
@@ -192,11 +201,7 @@ fixtures/
 *.example.yaml
 ```
 
-The `ollama` and `gemini` providers always run the deterministic rules first and then add
-contextual findings on top. Every finding records its origin in the `source` field (`rule` or
-`model`).
-
-#### What the output shows
+### What the output shows
 
 The `text` and `table` renderers report **where** each leak was found and **what to do about
 it**: the file and line, the impact, and a fix. Findings are grouped into a remediation plan, and
@@ -241,65 +246,13 @@ Next steps
   4. Re-run `g4env audit .` to confirm that the remediation worked.
 ```
 
-The `table` format prints the same findings as a sortable-looking overview followed by the
-per-finding details:
-
-```text
-SEVERITY  RULE                       CONF  LOCATION                    TITLE
-────────  ─────────────────────────  ────  ──────────────────────────  ───────────────────────
-HIGH      env.raw-secret             0.95  .env:2                      Raw API token detected
-HIGH      env.db-credentials         0.90  .env:3                      Database credentials in plaintext
-MEDIUM    env.tracked-env-file       0.70  .env:1                      Environment file is not excluded from version control
-```
-
 In JSON mode every finding carries the same information as machine-readable fields:
 `id`, `severity`, `confidence`, `title`, `description`, `evidence[]` (`line`, `text`, `path`),
 `impact`, `remediation` and `source`.
 
-### `g4env models`
-
-Lists the models available to a provider.
-
-| Option | Values | Default | Description |
-| --- | --- | --- | --- |
-| `--provider` | `ollama`, `gemini` | `ollama` | Which backend to query. |
-| `--host` | URL | `http://127.0.0.1:11434` | Ollama server URL. |
-| `--format` | `table`, `json` | `table` | Output format. |
-| `--warm` | flag | - | Preload the selected model into memory. |
-| `--model` | model name | provider default | Model to warm up. |
-
-### `g4env rules`
-
-Lists the deterministic rules with their severity and description.
-
-| Option | Values | Default | Description |
-| --- | --- | --- | --- |
-| `--format` | `table`, `json` | `table` | Output format. |
-
-### `g4env schema`
-
-Shows the versioned report schema, or validates an existing report against it.
-
-| Option | Values | Default | Description |
-| --- | --- | --- | --- |
-| `--format` | `json`, `text` | `text` | Output format. |
-| `--validate` | path | - | Validate a report file against the schema. |
-
-### `g4env bench`
-
-Runs the local quality benchmark against the documented test set in
-`src/g4env/bench/dataset.json`.
-
-| Option | Values | Default | Description |
-| --- | --- | --- | --- |
-| `--format` | `json`, `table`, `text` | `text` | Output format. |
-| `--provider` | `rules`, `ollama`, `gemini` | `rules` | Backend to evaluate. |
-| `--model` | model name | provider default | Model tag or name. |
-| `--host` | URL | `http://127.0.0.1:11434` | Ollama server URL. |
-
 ---
 
-## Deterministic rules
+## Detection rules
 
 Deterministic checks run instantly without model dependencies or network access:
 
@@ -318,7 +271,19 @@ Deterministic checks run instantly without model dependencies or network access:
 `env.raw-secret` recognises a wide range of vendor formats (AWS, GitHub, GitLab, Google, OpenAI,
 Anthropic, Stripe, Slack, SendGrid, Twilio, npm, PyPI, Hugging Face, DigitalOcean, Notion, Cloudflare,
 Sentry, Azure, Supabase/JWT, and more) as well as secret-shaped assignments whose variable name
-indicates a credential.
+indicates a credential. See [`docs/rules.md`](docs/rules.md) for a rule-by-rule reference with
+examples of what is and is not reported.
+
+---
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success (no findings met the failure threshold). |
+| 1 | Operational or analysis error (invalid input, unavailable provider). |
+| 2 | Usage error (invalid flag or argument). |
+| 3 | Policy violation: a finding met or exceeded `--fail-on`. |
 
 ---
 
@@ -351,7 +316,7 @@ Reports follow schema version 1.0:
     "offline": true,
     "model": null,
     "files_scanned": 1,
-    "duration_ms": 3,
+    "duration_ms": 0,
     "network_scope": "none",
     "components": ["rules"]
   }
@@ -364,47 +329,102 @@ is written, so `--format json` output is always schema-correct.
 
 ---
 
-## Exit codes
+## Current Project Status
 
-| Code | Meaning |
-| --- | --- |
-| 0 | Success (no findings met the failure threshold). |
-| 1 | Operational or analysis error (invalid input, unavailable provider). |
-| 2 | Usage error (invalid flag or argument). |
-| 3 | Policy violation: a finding met or exceeded `--fail-on`. |
+`g4env` has an initial implementation of its core functionality, including:
 
----
+- A Python package and command-line interface.
+- Deterministic, offline-first secret detection.
+- Optional local model integration through Ollama.
+- An optional hosted Gemini provider.
+- Secret redaction and input validation.
+- Structured, schema-validated security reports.
+- Automated tests, linting, type-checking, and benchmarking workflows.
 
-## Privacy & security boundaries
+**The project is currently available for local testing and feedback. It has not yet been released on PyPI.**
 
-- Audit inputs remain local and offline by default.
-- Files are validated for size and format constraints.
-- Detected secrets are redacted prior to model prompting and display.
-- Model outputs are treated as untrusted data and validated against strict schemas.
-
-### Provider boundaries
-
-| Provider | Network | What leaves the machine |
-| --- | --- | --- |
-| `rules` | none | Nothing. The default provider is fully offline. |
-| `ollama` | localhost only | Nothing. The model runs on your machine. |
-| `gemini` | remote | Redacted file content, sent to the hosted Gemini API. |
-
-The Gemini provider is the only backend that transmits data off the machine. It is opt-in
-(`--provider gemini`), it prints a notice on stderr, and the resulting report records
-`"offline": false` and `"network_scope": "remote"` so downstream consumers can tell. Secrets are
-still redacted before transmission.
-
-The Gemini API key is read from the `GEMINI_API_KEY`, `GOOGLE_API_KEY` or `G4ENV_GEMINI_API_KEY`
-environment variable only. It is deliberately *not* accepted as a command line flag, so it never
-ends up in shell history or a process listing.
-
-g4env is an audit assistant and does not replace comprehensive security reviews or secret
-management best practices.
+We are continuing to improve the tool, refine its detection capabilities, evaluate its performance, and build community awareness before making a public package release.
 
 ---
 
-## Development
+## Try It Locally
+
+Since `g4env` is not yet published on PyPI, you can test the current implementation directly from its GitHub repository.
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/CYBWithFlourish/g4env.git
+cd g4env
+```
+
+### 2. Create and activate a virtual environment
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+On Windows, activate the environment with:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+### 3. Install the project locally
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+This installs the project in editable mode, along with its development and testing dependencies.
+
+### 4. Run your first audit
+
+```bash
+g4env version
+
+# audit the whole current project
+g4env audit
+
+# or a single file
+g4env audit ./.env
+```
+
+You can also generate a JSON report:
+
+```bash
+g4env audit . --format json
+```
+
+To explore the available detection rules:
+
+```bash
+g4env rules
+```
+
+For local AI-assisted analysis, install the optional Ollama integration, ensure Ollama is running, and pull a supported model:
+
+```bash
+python -m pip install -e ".[ollama]"
+ollama pull gemma2:2b
+g4env models --warm
+g4env audit . --provider ollama
+```
+
+For hosted analysis, export a Gemini API key (it is never accepted as a command line flag) and opt in explicitly:
+
+```bash
+python -m pip install -e ".[gemini]"
+export GEMINI_API_KEY="your-key"
+g4env audit . --provider gemini
+```
+
+[`docs/providers.md`](docs/providers.md) documents both provider modes in full, including a
+step-by-step procedure for testing the current code against the Gemini API.
+
+### Development
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -424,6 +444,37 @@ g4env bench                 # rule quality against the labelled test set
 
 ---
 
+## Roadmap
+
+Our goal is to make `g4env` a more reliable, accessible, and useful security tool for developers.
+
+Current areas of focus include:
+
+- Improving secret-detection accuracy and reducing false positives.
+- Strengthening contextual analysis and model evaluation.
+- Expanding test coverage and benchmarking.
+- Refining the developer experience and documentation.
+- Gathering community feedback and contributions.
+- Preparing for a future PyPI release once the project is more mature.
+
+The timing of the public package release will depend on development progress, testing, and readiness.
+
+---
+
+## Contributing
+
+`g4env` is still evolving, and feedback from developers is valuable.
+
+You can help by testing the current implementation locally, reporting reproducible bugs, suggesting improvements, contributing detection rules, or helping improve the documentation.
+
+When reporting a security-related issue, never include live credentials, private keys, or other sensitive information.
+
+---
+
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+`g4env` is licensed under the GPL-3.0-or-later license. See [LICENSE](LICENSE).
+
+---
+
+**Built for developers who want to catch configuration security issues early, without giving up control over their sensitive data.**
