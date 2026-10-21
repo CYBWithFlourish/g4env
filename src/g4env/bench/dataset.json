@@ -1,0 +1,325 @@
+{
+  "version": "1.0",
+  "description": "Labelled evaluation set for g4env. Cases in mode 'rules' are checked against the deterministic rule identifiers, cases in mode 'contextual' can only be found by a model backend.",
+  "cases": [
+    {
+      "id": "aws-access-key-id",
+      "filename": ".env",
+      "kind": "env",
+      "text": "AWS_ACCESS_KEY_ID={{AWS_ACCESS_KEY_ID}}\nAWS_REGION=us-east-1\nAWS_SECRET_ACCESS_KEY={{AWS_SECRET_ACCESS_KEY}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "A well known AWS access key id format must be reported."
+    },
+    {
+      "id": "stripe-secret-key",
+      "filename": ".env",
+      "kind": "env",
+      "text": "STRIPE_API_KEY={{STRIPE_KEY}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "Stripe live secret keys have a fixed prefix and must be reported."
+    },
+    {
+      "id": "github-token",
+      "filename": ".env",
+      "kind": "env",
+      "text": "GITHUB_TOKEN={{GITHUB_TOKEN}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "GitHub personal access tokens must be reported."
+    },
+    {
+      "id": "google-api-key",
+      "filename": ".env",
+      "kind": "env",
+      "text": "GOOGLE_API_KEY={{GOOGLE_API_KEY}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "Google API keys start with AIza and must be reported."
+    },
+    {
+      "id": "openai-api-key",
+      "filename": ".env",
+      "kind": "env",
+      "text": "OPENAI_API_KEY={{OPENAI_API_KEY}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "Project scoped OpenAI keys must be reported."
+    },
+    {
+      "id": "anthropic-api-key",
+      "filename": ".env",
+      "kind": "env",
+      "text": "ANTHROPIC_API_KEY={{ANTHROPIC_API_KEY}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "Anthropic keys must be reported."
+    },
+    {
+      "id": "sendgrid-api-key",
+      "filename": ".env",
+      "kind": "env",
+      "text": "SENDGRID_API_KEY={{SENDGRID_API_KEY}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "SendGrid keys use a two part format and must be reported."
+    },
+    {
+      "id": "slack-bot-token",
+      "filename": ".env",
+      "kind": "env",
+      "text": "SLACK_TOKEN={{SLACK_TOKEN}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "Slack bot tokens must be reported."
+    },
+    {
+      "id": "jwt-secret",
+      "filename": ".env",
+      "kind": "env",
+      "text": "SESSION_SECRET={{JWT_SECRET}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "Signed JSON web tokens used as secrets must be reported."
+    },
+    {
+      "id": "npm-token",
+      "filename": ".env",
+      "kind": "env",
+      "text": "NPM_TOKEN={{NPM_TOKEN}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "npm publish tokens must be reported."
+    },
+    {
+      "id": "huggingface-token",
+      "filename": ".env",
+      "kind": "env",
+      "text": "HF_TOKEN={{HF_TOKEN}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "Hugging Face access tokens must be reported."
+    },
+    {
+      "id": "azure-storage-key",
+      "filename": "config.yaml",
+      "kind": "config",
+      "text": "azure_storage:\n  connection_string: DefaultEndpointsProtocol=https;AccountName=devstore;AccountKey={{AZURE_ACCOUNT_KEY}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "Azure storage connection strings carry an account key."
+    },
+    {
+      "id": "digitalocean-token",
+      "filename": ".env",
+      "kind": "env",
+      "text": "DO_TOKEN={{DO_TOKEN}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "DigitalOcean personal access tokens must be reported."
+    },
+    {
+      "id": "generic-secret-assignment",
+      "filename": ".env",
+      "kind": "env",
+      "text": "API_PASSWORD={{GENERIC_PASSWORD}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "A secret shaped variable with a literal value must be reported."
+    },
+    {
+      "id": "rsa-private-key",
+      "filename": "deploy/id_rsa.pem",
+      "kind": "config",
+      "text": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAy8Dbv8prpJ0kKhlGeJYozo2t60EG8L0561g13R29LvMR5hy\nMIIEowIBAAKCAQEAy8Dbv8prpJ0kKhlGeJYozo2t60EG8L0561g13R29LvMR5hy\n-----END RSA PRIVATE KEY-----\n",
+      "expect": ["env.private-key"],
+      "allow_any_model": true,
+      "rationale": "Embedded private key material is critical."
+    },
+    {
+      "id": "openssh-private-key",
+      "filename": ".env",
+      "kind": "env",
+      "text": "DEPLOY_KEY=-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gt\n-----END OPENSSH PRIVATE KEY-----\n",
+      "expect": ["env.private-key"],
+      "allow_any_model": true,
+      "rationale": "OpenSSH private keys are critical as well."
+    },
+    {
+      "id": "postgres-uri-credentials",
+      "filename": ".env",
+      "kind": "env",
+      "text": "DATABASE_URL=postgres://appuser:sup3rs3cret@db.internal:5432/production\n",
+      "expect": ["env.db-credentials"],
+      "allow_any_model": true,
+      "rationale": "Connection strings with a username and password must be reported."
+    },
+    {
+      "id": "ado-net-connection-string",
+      "filename": "appsettings.json",
+      "kind": "config",
+      "text": "{\n  \"ConnectionStrings\": {\n    \"Default\": \"Server=db01.internal;Database=app;User Id=appuser;Password=hunter2prod;Encrypt=true\"\n  }\n}\n",
+      "expect": ["env.db-credentials"],
+      "allow_any_model": true,
+      "rationale": "ADO.NET style connection strings embed credentials."
+    },
+    {
+      "id": "template-real-secret",
+      "filename": ".env.example",
+      "kind": "env",
+      "template": true,
+      "text": "# Copy this file to .env and fill in the values\nSTRIPE_API_KEY={{STRIPE_KEY}}\n",
+      "expect": ["env.insecure-default", "env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "A template that ships a real key is both a template problem and a raw secret."
+    },
+    {
+      "id": "unclassified-high-entropy",
+      "filename": "config.yaml",
+      "kind": "config",
+      "text": "CONFIG_BLOB=k3J4h5G6f7D8s9A0b1C2d3E4f5G6h7J8\n",
+      "expect": ["env.high-entropy"],
+      "allow_any_model": true,
+      "rationale": "Opaque values assigned to unclassified variables deserve a look."
+    },
+    {
+      "id": "weak-password-value",
+      "filename": ".env",
+      "kind": "env",
+      "text": "DB_PASSWORD=admin\n",
+      "expect": ["env.weak-password"],
+      "allow_any_model": true,
+      "rationale": "Trivial passwords must be reported."
+    },
+    {
+      "id": "hardcoded-auth-header",
+      "filename": "app/client.py",
+      "kind": "source",
+      "text": "import requests\n\nsession.headers.update({\"Authorization\": \"Bearer abc123DEF456ghi789JKL012\"})\n",
+      "expect": ["env.hardcoded-auth-header"],
+      "allow_any_model": true,
+      "rationale": "A literal bearer token in source code must be reported."
+    },
+    {
+      "id": "ci-pipeline-secret",
+      "filename": ".github/workflows/deploy.yml",
+      "kind": "ci",
+      "text": "name: deploy\non:\n  workflow_dispatch:\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: publish\n        env:\n          REGISTRY_PASSWORD: hunter2production\n        run: ./deploy.sh\n",
+      "expect": ["env.secret-in-ci"],
+      "allow_any_model": true,
+      "rationale": "Pipelines must reference the CI secret store, not literal values."
+    },
+    {
+      "id": "commented-real-credential",
+      "filename": ".env",
+      "kind": "env",
+      "text": "# rotated 2024-01-01\n# STRIPE_API_KEY={{STRIPE_KEY}}\n",
+      "expect": ["env.raw-secret"],
+      "allow_any_model": true,
+      "rationale": "A real credential in a comment is still a credential."
+    },
+    {
+      "id": "placeholder-values",
+      "filename": ".env",
+      "kind": "env",
+      "text": "SECRET_TOKEN=\nAPI_PASSWORD=changeme\nCLIENT_SECRET=your-client-secret-here\n",
+      "expect": [],
+      "rationale": "Placeholders must not be reported."
+    },
+    {
+      "id": "env-references",
+      "filename": ".env",
+      "kind": "env",
+      "text": "API_KEY=${STRIPE_SECRET_KEY}\nDATABASE_PASSWORD=$DB_PASS\nTOKEN={{ vault_token }}\n",
+      "expect": [],
+      "rationale": "Values that only reference another secret source are not leaks."
+    },
+    {
+      "id": "benign-settings",
+      "filename": ".env",
+      "kind": "env",
+      "text": "PORT=8000\nDEBUG=false\nAPP_NAME=my-service\nLOG_LEVEL=info\nDATABASE_URL=postgres://localhost:5432/app\n",
+      "expect": [],
+      "rationale": "Ordinary configuration must stay silent."
+    },
+    {
+      "id": "template-placeholders",
+      "filename": ".env.example",
+      "kind": "env",
+      "template": true,
+      "text": "API_KEY=your-api-key-here\nDATABASE_URL=postgres://user:password@localhost:5432/app\nSECRET=xxxx\n",
+      "expect": [],
+      "rationale": "A template that only contains placeholders is correct."
+    },
+    {
+      "id": "commented-placeholder",
+      "filename": ".env",
+      "kind": "env",
+      "text": "# API_KEY=your-api-key-here\n",
+      "expect": [],
+      "rationale": "A commented placeholder is not a leak."
+    },
+    {
+      "id": "low-entropy-unclassified",
+      "filename": "config.yaml",
+      "kind": "config",
+      "text": "BUILD_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+      "expect": [],
+      "rationale": "Low entropy values are not interesting."
+    },
+    {
+      "id": "public-key-material",
+      "filename": "id_rsa.pub",
+      "kind": "config",
+      "text": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDdl4xJ2bVn8X9pC8Z3nQ1sT7vV0mK6wR8yL1uI5oP2aS4dF6gH8jK0lM2nO4qR6sT8vW0xY2zA4bC6dE8 user@example\n",
+      "expect": [],
+      "rationale": "Public keys are not secrets."
+    },
+    {
+      "id": "db-uri-placeholder-password",
+      "filename": ".env.example",
+      "kind": "env",
+      "template": true,
+      "text": "DATABASE_URL=postgres://user:password@localhost:5432/app\n",
+      "expect": [],
+      "rationale": "A placeholder password in a connection string is not a leak."
+    },
+    {
+      "id": "ctx-shared-password-comment",
+      "filename": "config.yaml",
+      "kind": "config",
+      "mode": "contextual",
+      "text": "# The staging environment reuses the production admin password.\nenvironment: staging\n",
+      "expect": ["ctx.*"],
+      "rationale": "Only a model can connect the comment to the risk."
+    },
+    {
+      "id": "ctx-debug-in-production",
+      "filename": "config.yaml",
+      "kind": "config",
+      "mode": "contextual",
+      "text": "ENVIRONMENT=production\nDEBUG_MODE=enabled\n",
+      "expect": ["ctx.*"],
+      "rationale": "Debug output in production is a contextual finding."
+    },
+    {
+      "id": "ctx-public-bucket",
+      "filename": "config.yaml",
+      "kind": "config",
+      "mode": "contextual",
+      "text": "S3_BUCKET_POLICY=public-read\nS3_BUCKET=assets\n",
+      "expect": ["ctx.*"],
+      "rationale": "A public bucket policy is a contextual finding."
+    },
+    {
+      "id": "ctx-open-cors",
+      "filename": "config.yaml",
+      "kind": "config",
+      "mode": "contextual",
+      "text": "ALLOWED_ORIGINS=*\nCORS_ENABLE_COOKIES=true\n",
+      "expect": ["ctx.*"],
+      "rationale": "Wildcard CORS with cookies is a contextual finding."
+    }
+  ]
+}
